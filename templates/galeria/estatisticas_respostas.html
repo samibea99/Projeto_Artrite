@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estatísticas das Respostas</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Estatísticas das Respostas por Fase</h1>
+
+    <div id="graficos"></div>
+    <div>
+        <a href="{% url 'exportar_relatorio_pdf' %}" class="btn btn-primary">Baixar Relatório em PDF</a>
+    </div>
+
+    <script>
+        var estatisticas = JSON.parse('{{ estatisticas_json|escapejs }}');
+
+        Object.keys(estatisticas).forEach(fase => {
+            var perguntas = Object.keys(estatisticas[fase]);
+            var labels = [];
+            var sim_data = [];
+            var nao_data = [];
+
+            perguntas.forEach(pergunta => {
+                labels.push(pergunta);
+                sim_data.push(estatisticas[fase][pergunta]["Sim"]);
+                nao_data.push(estatisticas[fase][pergunta]["Não"]);
+            });
+
+            var trace1 = {
+                x: labels,
+                y: sim_data,
+                name: 'Sim',
+                type: 'bar',
+                marker: { color: 'green' }
+            };
+
+            var trace2 = {
+                x: labels,
+                y: nao_data,
+                name: 'Não',
+                type: 'bar',
+                marker: { color: 'red' }
+            };
+
+            var layout = {
+                title: `Fase: ${fase}`,
+                barmode: 'group'
+            };
+
+            var div_id = `grafico_${fase}`;
+            var div = document.createElement("div");
+            div.id = div_id;
+            document.getElementById("graficos").appendChild(div);
+
+            Plotly.newPlot(div_id, [trace1, trace2], layout);
+        });
+    </script>
+</body>
+</html>

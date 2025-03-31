@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Dashboard - Estatísticas dos Questionários</h1>
+    <div>
+        <h2>Pacientes por Fase</h2>
+        {{ grafico_pacientes | safe }}
+    </div>
+    <div>
+        <a href="{% url 'exportar_relatorio_pdf' %}" class="btn btn-primary">Baixar Relatório em PDF</a>
+    </div>
+
+    
+</body>
+</html>

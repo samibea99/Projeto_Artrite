@@ -1,3 +1,17 @@
+import json
+import matplotlib.pyplot as plt
+import io
+import plotly.express as px
+import plotly.io as pio
+import pandas as pd
+from datetime import datetime
+from PIL import Image as PILImage
+from reportlab.platypus import Image
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from django.db.models import Count
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Paciente, Pergunta, Resposta
 from django.http import HttpResponse 
@@ -101,3 +115,143 @@ def questionario_reducao(request, paciente_id):
         "pergunta": pergunta
     })
 
+def dashboard_view(request):
+    # Contagem de pacientes por fase
+    pacientes_por_fase = Paciente.objects.values('fase_tratamento').annotate(total=Count('id'))
+
+    df_pacientes = pd.DataFrame(list(pacientes_por_fase))
+    
+    # Criando o gráfico de barras com Plotly
+    if not df_pacientes.empty:
+        fig = px.bar(df_pacientes, x='fase_tratamento', y='total', title='Número de Pacientes por Fase')
+        grafico_pacientes = pio.to_html(fig, full_html=False)
+    else:
+        grafico_pacientes = "<p>Nenhum dado disponível</p>"
+
+    # Renderiza a página com o gráfico
+    return render(request, "galeria/dashboard.html", {"grafico_pacientes": grafico_pacientes})
+
+def estatisticas_respostas(request):
+    # Obtendo as respostas agrupadas por fase, pergunta e resposta (Sim/Não)
+    respostas_por_fase = Resposta.objects.values(
+            'pergunta__fase_tratamento',  
+            'pergunta__texto', 
+            'resposta'
+        ).annotate(total=Count('id'))
+
+    # Estruturando os dados para o gráfico
+    estatisticas = {}
+    for item in respostas_por_fase:
+        fase = item['pergunta__fase_tratamento']
+        pergunta = item['pergunta__texto']
+        resposta = "Sim" if item['resposta'] else "Não"
+        total = item['total']
+
+        if fase not in estatisticas:
+            estatisticas[fase] = {}
+
+        if pergunta not in estatisticas[fase]:
+            estatisticas[fase][pergunta] = {"Sim": 0, "Não": 0}
+
+        estatisticas[fase][pergunta][resposta] = total
+
+    # Convertendo os dados para JSON para passar ao template
+    estatisticas_json = json.dumps(estatisticas)
+
+    return render(request, 'galeria/estatisticas_respostas.html', {'estatisticas_json': estatisticas_json})
+
+def exportar_relatorio_pdf(request):
+    # Criar a resposta HTTP para o PDF
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="relatorio_estatisticas.pdf"'
+
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+
+    # Obtendo os dados agrupados por fase, pergunta e resposta
+    respostas_por_fase = Resposta.objects.values(
+        'pergunta__fase_tratamento',  
+        'pergunta__texto', 
+        'resposta'
+    ).annotate(total=Count('id'))
+
+    # Estruturando os dados para o relatório
+    estatisticas = {}
+
+    for item in respostas_por_fase:
+        fase = item['pergunta__fase_tratamento']
+        pergunta = item['pergunta__texto']
+        resposta = "Sim" if item['resposta'] else "Não"
+        total = item['total']
+
+        if fase not in estatisticas:
+            estatisticas[fase] = {}
+
+        if pergunta not in estatisticas[fase]:
+            estatisticas[fase][pergunta] = {"Sim": 0, "Não": 0, "Total": 0}
+
+        estatisticas[fase][pergunta][resposta] = total
+        estatisticas[fase][pergunta]["Total"] += total
+
+    # Agora calculamos os percentuais corretamente
+    for fase, perguntas in estatisticas.items():
+        for pergunta, respostas in perguntas.items():
+            total_respostas = respostas["Total"]
+            if total_respostas > 0:
+                respostas["% Sim"] = round((respostas["Sim"] / total_respostas) * 100, 2)
+                respostas["% Não"] = 100 - respostas["% Sim"]  # Garante que soma 100%
+            else:
+                respostas["% Sim"] = respostas["% Não"] = 0  # Evita divisão por zero
+
+    # Criando a tabela para o PDF
+    dados_tabela = [["Fase", "Pergunta", "Sim", "Não", "% Sim", "% Não"]]
+
+    for fase, perguntas in estatisticas.items():
+        for pergunta, respostas in perguntas.items():
+            dados_tabela.append([
+                fase, pergunta,
+                respostas["Sim"], respostas["Não"],
+                f"{respostas['% Sim']:.2f}%", f"{respostas['% Não']:.2f}%"
+            ])
+
+    # Criando a tabela no ReportLab
+    tabela = Table(dados_tabela)
+    tabela.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+
+    elements.append(tabela)
+    pacientes_por_fase = Paciente.objects.values('fase_tratamento').annotate(total=Count('id'))
+    df_pacientes = pd.DataFrame(list(pacientes_por_fase))
+
+    if not df_pacientes.empty:
+        plt.figure(figsize=(6, 4))
+        plt.bar(df_pacientes['fase_tratamento'], df_pacientes['total'], color='skyblue')
+        plt.xlabel('Fase de Tratamento')
+        plt.ylabel('Número de Pacientes')
+        plt.title('Número de Pacientes por Fase')
+        plt.xticks(rotation=45)
+
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png')
+        plt.close()
+
+        # Converter a imagem em PNG para ser usada corretamente
+        img_buffer.seek(0)
+        pil_img = PILImage.open(img_buffer)
+        pil_img.save("grafico.png", format="PNG")
+
+        # Agora, sim, carregamos a imagem corretamente no PDF
+        img = Image("grafico.png", width=400, height=300)
+        elements.append(img)
+
+    # Construir o documento PDF
+    doc.build(elements)
+
+    return response
