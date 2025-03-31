@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro do Paciente</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+</head>
+<body>
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-semibold text-center mb-6">Cadastro do Paciente</h1>
+
+        {% if erro %}
+            <div class="bg-red-500 text-white p-2 rounded mb-4">{{ erro }}</div>
+        {% endif %}
+
+        <form method="POST" class="bg-gray-100 p-6 rounded-lg shadow-md">
+            {% csrf_token %}
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold">Número do Paciente</label>
+                <input type="text" name="numero_paciente" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold">Número do Centro</label>
+                <input type="text" name="numero_centro" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold">Número do Pesquisador</label>
+                <input type="text" name="numero_pesquisador" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold">Data da Observação</label>
+                <input type="date" name="data_observacao" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold">Fase do Tratamento</label>
+                <select name="fase_tratamento" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                    <option value="fase1">Fase 1 - Início do tratamento</option>
+                    <option value="fase1b">Fase 1B - Menos de 3 meses de tratamento</option>
+                    <option value="fase2">Fase 2 - 3 a 6 meses de tratamento</option>
+                    <option value="fase3">Fase 3 - Mais de 6 meses de tratamento</option>
+                    <option value="reducao">Redução</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded-lg">Cadastrar Paciente</button>
+        </form>
+    </div>
+</body>
+</html>
