@@ -33,7 +33,7 @@ class Pergunta(models.Model):
 class Resposta(models.Model):
     paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
     pergunta = models.ForeignKey(Pergunta, on_delete=models.CASCADE)  # Relaciona diretamente com a tabela Pergunta
-    resposta = models.BooleanField(null=True, blank=True)
+    resposta = models.BooleanField(default=False)
     
     class Meta:
         unique_together = ('paciente', 'pergunta')  # Garante que não haja respostas duplicadas para a mesma pergunta e paciente

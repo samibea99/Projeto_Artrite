@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
@@ -6,13 +6,19 @@
     <title>Questionário Concluído - Paciente {{ paciente.numero_paciente }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
 </head>
-<body>
-    <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-semibold text-center mb-6">Questionário Concluído - Paciente {{ paciente.numero_paciente }}</h1>
-        <p class="text-center text-lg">O questionário foi concluído com sucesso! Agradecemos pela sua participação.</p>
-        <div class="text-center mt-6">
-            <a href="/outro-local" class="bg-blue-500 text-white py-2 px-4 rounded-lg">Voltar ao início</a>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4" style="background-image: url('{% static 'img/cad.jpg' %}'); background-size: 100% auto; background-repeat: no-repeat; background-position: center;">
+    
+    <div class="w-full max-w-3xl bg-white p-8 rounded-lg shadow-lg text-center">
+        <h1 class="text-4xl font-semibold text-blue-600 mb-6">Questionário Concluído</h1>
+        <p class="text-lg text-gray-700">O questionário do paciente <span class="font-bold">{{ paciente.numero_paciente }}</span> foi concluído com sucesso!</p>
+        <p class="text-gray-600 mt-2">Agradecemos pela sua participação.</p>
+        
+        <div class="mt-8 space-y-4">
+            <a href="/outro-local" class="block w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600">Voltar ao Início</a>
+            <a href="/dashboard" class="block w-full bg-green-500 text-white py-3 rounded-lg hover:bg-green-600">Ver Dashboard</a>
+            <a href="/estatisticas" class="block w-full bg-purple-500 text-white py-3 rounded-lg hover:bg-purple-600">Ver Estatísticas das Respostas</a>
         </div>
     </div>
+    
 </body>
 </html>

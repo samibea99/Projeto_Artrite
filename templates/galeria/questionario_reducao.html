@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -6,30 +7,40 @@
     <title>Questionário Redução - Paciente {{ paciente.numero_paciente }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
 </head>
-<body>
-    <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-semibold text-center mb-6">Questionário Redução - Paciente {{ paciente.numero_paciente }}</h1>
+<body class="bg-gray-100" style="background-image: url('{% static 'img/cad.jpg' %}'); background-size: 100% auto; background-repeat: no-repeat; background-position: center;">
 
-        <form method="POST" class="bg-gray-100 p-6 rounded-lg shadow-md">
-            {% csrf_token %}
-            
-            <input type="hidden" name="pergunta_atual" value="{{ pergunta.numero_pergunta }}">
-            
-            <div class="mb-4">
-                <label class="block text-gray-700 font-semibold">Pergunta {{ pergunta }}:</label>
-                <p class="text-gray-700">Responda com Sim ou Não</p>
-            </div>
-            
-            <div class="mb-4">
-                <label class="block text-gray-700 font-semibold">Resposta</label>
-                <select name="resposta" class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
-                    <option value="sim">Sim</option>
-                    <option value="nao">Não</option>
-                </select>
-            </div>
-            
-            <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded-lg">Continuar</button>
-        </form>
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-4xl bg-white p-8 rounded-lg shadow-lg">
+            <!-- Título com margem e cor diferenciada -->
+            <h1 class="text-4xl font-semibold text-center text-blue-600 mb-8">Questionário Fase de Redução - Paciente {{ paciente.numero_paciente }}</h1>
+
+            <form method="POST" class="space-y-6">
+                {% csrf_token %}
+                
+                <input type="hidden" name="pergunta_atual" value="{{ pergunta.numero_pergunta }}">
+                
+                <!-- Pergunta -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold">Pergunta {{ pergunta }}:</label>
+                    <p class="text-gray-600">Selecione sua resposta abaixo</p>
+                </div>
+                
+                <!-- Resposta -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-semibold">Resposta</label>
+                    <select name="resposta" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <option value="sim" selected>Sim</option>
+                        <option value="nao">Não</option>
+                    </select>
+                </div>
+                
+                <!-- Botão de submissão -->
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    Continuar
+                </button>
+            </form>
+        </div>
     </div>
+
 </body>
 </html>

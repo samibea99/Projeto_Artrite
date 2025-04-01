@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -6,40 +7,41 @@
     <title>Cadastro do Paciente</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
 </head>
-<body>
+<body class="bg-gray-200" style="background-image: url('{% static 'img/cad.jpg' %}'); background-size: 100% auto; background-repeat: no-repeat; background-position: center;">
+
     <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-semibold text-center mb-6">Cadastro do Paciente</h1>
+        <h1 class="text-3xl font-semibold text-center mb-6 mt-12">Cadastro do Paciente</h1>
 
         {% if erro %}
             <div class="bg-red-500 text-white p-2 rounded mb-4">{{ erro }}</div>
         {% endif %}
 
-        <form method="POST" class="bg-gray-100 p-6 rounded-lg shadow-md">
+        <form method="POST" class="bg-white p-8 rounded-lg shadow-lg max-w-4xl mx-auto">
             {% csrf_token %}
             
-            <div class="mb-4">
+            <div class="mb-6">
                 <label class="block text-gray-700 font-semibold">Número do Paciente</label>
-                <input type="text" name="numero_paciente" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                <input type="text" name="numero_paciente" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300 focus:outline-none">
             </div>
             
-            <div class="mb-4">
+            <div class="mb-6">
                 <label class="block text-gray-700 font-semibold">Número do Centro</label>
-                <input type="text" name="numero_centro" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                <input type="text" name="numero_centro" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300 focus:outline-none">
             </div>
             
-            <div class="mb-4">
+            <div class="mb-6">
                 <label class="block text-gray-700 font-semibold">Número do Pesquisador</label>
-                <input type="text" name="numero_pesquisador" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                <input type="text" name="numero_pesquisador" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300 focus:outline-none">
             </div>
             
-            <div class="mb-4">
+            <div class="mb-6">
                 <label class="block text-gray-700 font-semibold">Data da Observação</label>
-                <input type="date" name="data_observacao" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                <input type="date" name="data_observacao" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300 focus:outline-none">
             </div>
             
-            <div class="mb-4">
+            <div class="mb-6">
                 <label class="block text-gray-700 font-semibold">Fase do Tratamento</label>
-                <select name="fase_tratamento" required class="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300">
+                <select name="fase_tratamento" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300 focus:outline-none">
                     <option value="fase1">Fase 1 - Início do tratamento</option>
                     <option value="fase1b">Fase 1B - Menos de 3 meses de tratamento</option>
                     <option value="fase2">Fase 2 - 3 a 6 meses de tratamento</option>
@@ -48,8 +50,11 @@
                 </select>
             </div>
             
-            <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded-lg">Cadastrar Paciente</button>
+            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+                Cadastrar Paciente
+            </button>
         </form>
     </div>
+
 </body>
 </html>

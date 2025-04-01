@@ -7,7 +7,9 @@ import pandas as pd
 from datetime import datetime
 from PIL import Image as PILImage
 from reportlab.platypus import Image
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.units import inch
+from textwrap import wrap
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
@@ -55,7 +57,7 @@ def questionario_reducao(request, paciente_id):
     
     pergunta_atual = int(request.POST.get("pergunta_atual", 1))  # Pergunta inicial = 1 se não houver POST
 
-    # 🔹 Dicionário de transições de perguntas com base nas respostas
+    # 🔹 Mapeamento das perguntas com base na resposta
     transicoes = {
         1: {'sim': 2, 'nao': 3},
         2: {'sim': 4, 'nao': 9},
@@ -75,7 +77,6 @@ def questionario_reducao(request, paciente_id):
         16: {'sim': 'fim', 'nao': 'fim'}  # Conclui o questionário
     }
 
-    # 🔹 Busca a pergunta atual
     pergunta = Pergunta.objects.filter(numero_pergunta=pergunta_atual, fase_tratamento="reducao").first()
     if not pergunta:
         return HttpResponse("Pergunta não encontrada.", status=404)
@@ -83,20 +84,23 @@ def questionario_reducao(request, paciente_id):
     if request.method == "POST":
         resposta_raw = request.POST.get("resposta")
 
-        # 🔹 Converte "sim"/"nao" para True/False
-        if resposta_raw == "sim":
-            resposta = True
-        elif resposta_raw == "nao":
-            resposta = False
-        else:
-            return HttpResponse("Resposta inválida.", status=400)  # Caso venha um valor inesperado
+        # 🔹 Log do que está sendo recebido no POST
+        print(f"DEBUG: Resposta recebida no POST -> {resposta_raw}")
 
-        # 🔹 Salva a resposta
-        Resposta.objects.create(
+        # 🔹 Converte "sim"/"nao" para True/False corretamente
+        resposta = resposta_raw.strip().lower() == "sim"
+
+        # 🔹 Log do valor convertido
+        print(f"DEBUG: Resposta convertida para booleano -> {resposta}")
+
+        # 🔹 Salva a resposta corretamente
+        resposta_obj, created = Resposta.objects.update_or_create(
             paciente=paciente,
             pergunta=pergunta,
-            resposta=resposta  # Agora sempre será True ou False
+            defaults={"resposta": resposta}  # Salva "True" ou "False"
         )
+
+        print(f"DEBUG: Resposta salva -> {resposta_obj.resposta} (Criado: {created})")
 
         # 🔹 Define a próxima pergunta
         proxima_pergunta = transicoes.get(pergunta_atual, {}).get(resposta_raw)
@@ -118,17 +122,19 @@ def questionario_reducao(request, paciente_id):
 def dashboard_view(request):
     # Contagem de pacientes por fase
     pacientes_por_fase = Paciente.objects.values('fase_tratamento').annotate(total=Count('id'))
-
     df_pacientes = pd.DataFrame(list(pacientes_por_fase))
     
-    # Criando o gráfico de barras com Plotly
+    # Criando o gráfico de pizza com Plotly
     if not df_pacientes.empty:
-        fig = px.bar(df_pacientes, x='fase_tratamento', y='total', title='Número de Pacientes por Fase')
+        fig = px.pie(df_pacientes, 
+                     names='fase_tratamento', 
+                     values='total', 
+                     title='Distribuição de Pacientes por Fase',
+                     color_discrete_sequence=px.colors.qualitative.Set2)  # Cores suaves
         grafico_pacientes = pio.to_html(fig, full_html=False)
     else:
         grafico_pacientes = "<p>Nenhum dado disponível</p>"
 
-    # Renderiza a página com o gráfico
     return render(request, "galeria/dashboard.html", {"grafico_pacientes": grafico_pacientes})
 
 def estatisticas_respostas(request):
@@ -141,6 +147,8 @@ def estatisticas_respostas(request):
 
     # Estruturando os dados para o gráfico
     estatisticas = {}
+    perguntas_registradas = {}
+
     for item in respostas_por_fase:
         fase = item['pergunta__fase_tratamento']
         pergunta = item['pergunta__texto']
@@ -152,8 +160,18 @@ def estatisticas_respostas(request):
 
         if pergunta not in estatisticas[fase]:
             estatisticas[fase][pergunta] = {"Sim": 0, "Não": 0}
+            perguntas_registradas[pergunta] = {"Sim": 0, "Não": 0}
 
-        estatisticas[fase][pergunta][resposta] = total
+        estatisticas[fase][pergunta][resposta] += total
+        perguntas_registradas[pergunta][resposta] += total
+
+    # Garantir que "Sim" e "Não" existam para todas as perguntas
+    for fase, perguntas in estatisticas.items():
+        for pergunta, respostas in perguntas.items():
+            if "Sim" not in respostas:
+                respostas["Sim"] = 0
+            if "Não" not in respostas:
+                respostas["Não"] = 0
 
     # Convertendo os dados para JSON para passar ao template
     estatisticas_json = json.dumps(estatisticas)
@@ -165,7 +183,7 @@ def exportar_relatorio_pdf(request):
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="relatorio_estatisticas.pdf"'
 
-    doc = SimpleDocTemplate(response, pagesize=letter)
+    doc = SimpleDocTemplate(response, pagesize=landscape(letter))  # 🟢 Modo paisagem para mais espaço
     elements = []
 
     # Obtendo os dados agrupados por fase, pergunta e resposta
@@ -175,6 +193,13 @@ def exportar_relatorio_pdf(request):
         'resposta'
     ).annotate(total=Count('id'))
 
+    # Contar o número de pacientes distintos que responderam cada pergunta
+    pacientes_por_pergunta = Resposta.objects.values(
+        'pergunta__texto'
+    ).annotate(total_pacientes=Count('paciente', distinct=True))
+
+    pacientes_dict = {p['pergunta__texto']: p['total_pacientes'] for p in pacientes_por_pergunta}
+
     # Estruturando os dados para o relatório
     estatisticas = {}
 
@@ -183,50 +208,62 @@ def exportar_relatorio_pdf(request):
         pergunta = item['pergunta__texto']
         resposta = "Sim" if item['resposta'] else "Não"
         total = item['total']
+        total_pacientes = pacientes_dict.get(pergunta, 0)
 
         if fase not in estatisticas:
             estatisticas[fase] = {}
 
         if pergunta not in estatisticas[fase]:
-            estatisticas[fase][pergunta] = {"Sim": 0, "Não": 0, "Total": 0}
+            estatisticas[fase][pergunta] = {
+                "Sim": 0, "Não": 0, "Total": 0, "Respondentes": total_pacientes
+            }
 
         estatisticas[fase][pergunta][resposta] = total
         estatisticas[fase][pergunta]["Total"] += total
 
-    # Agora calculamos os percentuais corretamente
     for fase, perguntas in estatisticas.items():
         for pergunta, respostas in perguntas.items():
             total_respostas = respostas["Total"]
             if total_respostas > 0:
                 respostas["% Sim"] = round((respostas["Sim"] / total_respostas) * 100, 2)
-                respostas["% Não"] = 100 - respostas["% Sim"]  # Garante que soma 100%
+                respostas["% Não"] = 100 - respostas["% Sim"]
             else:
-                respostas["% Sim"] = respostas["% Não"] = 0  # Evita divisão por zero
+                respostas["% Sim"] = respostas["% Não"] = 0
 
     # Criando a tabela para o PDF
-    dados_tabela = [["Fase", "Pergunta", "Sim", "Não", "% Sim", "% Não"]]
+    dados_tabela = [["Fase", "Pergunta", "Sim", "Não", "% Sim", "% Não", "Respondentes"]]
 
     for fase, perguntas in estatisticas.items():
         for pergunta, respostas in perguntas.items():
+            # 🔹 Quebra de linha automática para perguntas longas
+            pergunta_formatada = "\n".join(wrap(pergunta, width=40))  
+
             dados_tabela.append([
-                fase, pergunta,
+                fase, pergunta_formatada,
                 respostas["Sim"], respostas["Não"],
-                f"{respostas['% Sim']:.2f}%", f"{respostas['% Não']:.2f}%"
+                f"{respostas['% Sim']:.2f}%", f"{respostas['% Não']:.2f}%",
+                respostas["Respondentes"]
             ])
 
-    # Criando a tabela no ReportLab
-    tabela = Table(dados_tabela)
+    # Criando a tabela no ReportLab com ajuste de largura
+    colWidths = [1.5 * inch, 3 * inch, 0.8 * inch, 0.8 * inch, 0.8 * inch, 0.8 * inch, 1 * inch]
+    tabela = Table(dados_tabela, colWidths=colWidths)  
+
     tabela.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),  # 🔹 Diminui a fonte para caber melhor
     ]))
 
     elements.append(tabela)
+
+    # Criando gráfico do número de pacientes por fase
     pacientes_por_fase = Paciente.objects.values('fase_tratamento').annotate(total=Count('id'))
     df_pacientes = pd.DataFrame(list(pacientes_por_fase))
 
@@ -242,12 +279,10 @@ def exportar_relatorio_pdf(request):
         plt.savefig(img_buffer, format='png')
         plt.close()
 
-        # Converter a imagem em PNG para ser usada corretamente
         img_buffer.seek(0)
         pil_img = PILImage.open(img_buffer)
         pil_img.save("grafico.png", format="PNG")
 
-        # Agora, sim, carregamos a imagem corretamente no PDF
         img = Image("grafico.png", width=400, height=300)
         elements.append(img)
 

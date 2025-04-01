@@ -5,17 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
 </head>
-<body>
-    <h1>Dashboard - Estatísticas dos Questionários</h1>
-    <div>
-        <h2>Pacientes por Fase</h2>
-        {{ grafico_pacientes | safe }}
+<body class="bg-gray-100 text-gray-900">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold text-center mb-6">Dashboard - Estatísticas dos Questionários</h1>
+        
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
+            <h2 class="text-2xl font-semibold text-center mb-4">Pacientes por Fase</h2>
+            <div class="flex justify-center">{{ grafico_pacientes | safe }}</div>
+        </div>
+        
+        <div class="text-center">
+            <a href="{% url 'exportar_relatorio_pdf' %}" class="bg-blue-500 text-white py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 transition">Baixar Relatório em PDF</a>
+        </div>
     </div>
-    <div>
-        <a href="{% url 'exportar_relatorio_pdf' %}" class="btn btn-primary">Baixar Relatório em PDF</a>
-    </div>
-
-    
 </body>
 </html>

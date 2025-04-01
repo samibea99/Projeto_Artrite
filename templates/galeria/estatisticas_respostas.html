@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estatísticas das Respostas</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <h1>Estatísticas das Respostas por Fase</h1>
-
-    <div id="graficos"></div>
-    <div>
-        <a href="{% url 'exportar_relatorio_pdf' %}" class="btn btn-primary">Baixar Relatório em PDF</a>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-center text-gray-800 mb-8">Estatísticas das Respostas por Fase</h1>
+        
+        <div id="graficos" class="bg-white p-6 rounded-xl shadow-lg overflow-x-auto"></div>
+        
+        <div class="text-center mt-8">
+            <a href="{% url 'exportar_relatorio_pdf' %}" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300">Baixar Relatório em PDF</a>
+        </div>
     </div>
-
+    
     <script>
         var estatisticas = JSON.parse('{{ estatisticas_json|escapejs }}');
 
@@ -34,7 +38,7 @@
                 y: sim_data,
                 name: 'Sim',
                 type: 'bar',
-                marker: { color: 'green' }
+                marker: { color: '#10B981' } // Verde moderno
             };
 
             var trace2 = {
@@ -42,17 +46,25 @@
                 y: nao_data,
                 name: 'Não',
                 type: 'bar',
-                marker: { color: 'red' }
+                marker: { color: '#EF4444' } // Vermelho moderno
             };
 
             var layout = {
                 title: `Fase: ${fase}`,
-                barmode: 'group'
+                barmode: 'group',
+                autosize: true,
+                width: 1200, // Aumento da largura
+                height: 700, // Aumento da altura
+                margin: { t: 100,b: 300 }, // Maior margem inferior para melhor visualização
+                xaxis: { tickangle: -35, tickfont: { size: 14 } },
+                yaxis: { title: "Quantidade de Respostas" },
+                responsive: true
             };
 
             var div_id = `grafico_${fase}`;
             var div = document.createElement("div");
             div.id = div_id;
+            div.className = "my-6 p-4 bg-gray-50 rounded-lg shadow-lg overflow-x-auto";
             document.getElementById("graficos").appendChild(div);
 
             Plotly.newPlot(div_id, [trace1, trace2], layout);
