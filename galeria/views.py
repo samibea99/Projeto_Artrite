@@ -17,6 +17,9 @@ from django.db.models import Count
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Paciente, Pergunta, Resposta
 from django.http import HttpResponse 
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
+from openpyxl import load_workbook
 
 def index(request):
     return render(request, 'galeria/index.html')
@@ -37,87 +40,161 @@ def cadastro_paciente(request):
             data_observacao=data_observacao,
             fase_tratamento=fase_tratamento
         )
-        
-        # Redirecionar para o questionário com base na fase do tratamento
-        if fase_tratamento == "fase1":
-            return redirect("questionario_fase1", paciente_id=paciente.id)
-        elif fase_tratamento == "fase1b":
-            return redirect("questionario_fase1b", paciente_id=paciente.id)
-        elif fase_tratamento == "fase2":
-            return redirect("questionario_fase2", paciente_id=paciente.id)
-        elif fase_tratamento == "fase3":
-            return redirect("questionario_fase3", paciente_id=paciente.id)
-        elif fase_tratamento == "reducao":
-            return redirect("questionario_reducao", paciente_id=paciente.id)
+
+        # Obter a primeira pergunta da fase selecionada
+        primeira_pergunta = Pergunta.objects.filter(
+            numero_pergunta=1,
+            fase_tratamento=paciente.fase_tratamento
+        ).first()
+
+        if primeira_pergunta:
+            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=primeira_pergunta.id)
+        else:
+            return HttpResponse("Nenhuma pergunta encontrada para a fase selecionada.", status=404)
 
     return render(request, "galeria/cadastro_paciente.html")
 
-def questionario_reducao(request, paciente_id):
+
+
+def responder_pergunta(request, paciente_id, pergunta_id=None):
     paciente = get_object_or_404(Paciente, id=paciente_id)
-    
-    pergunta_atual = int(request.POST.get("pergunta_atual", 1))  # Pergunta inicial = 1 se não houver POST
 
-    # 🔹 Mapeamento das perguntas com base na resposta
-    transicoes = {
-        1: {'sim': 2, 'nao': 3},
-        2: {'sim': 4, 'nao': 9},
-        3: {'sim': 6, 'nao': 4},
-        4: {'sim': 5, 'nao': 9},
-        5: {'sim': 9, 'nao': 9},
-        6: {'sim': 9, 'nao': 7},
-        7: {'sim': 9, 'nao': 8},
-        8: {'sim': 9, 'nao': 9},
-        9: {'sim': 10, 'nao': 10},
-        10: {'sim': 11, 'nao': 11},
-        11: {'sim': 12, 'nao': 12},
-        12: {'sim': 13, 'nao': 13},
-        13: {'sim': 14, 'nao': 14},
-        14: {'sim': 15, 'nao': 15},
-        15: {'sim': 16, 'nao': 16},
-        16: {'sim': 'fim', 'nao': 'fim'}  # Conclui o questionário
-    }
+    if pergunta_id:
+        pergunta = get_object_or_404(Pergunta, id=pergunta_id)
+    else:
+        pergunta = Pergunta.objects.filter(numero_pergunta=1, fase_tratamento=paciente.fase_tratamento).first()
 
-    pergunta = Pergunta.objects.filter(numero_pergunta=pergunta_atual, fase_tratamento="reducao").first()
     if not pergunta:
         return HttpResponse("Pergunta não encontrada.", status=404)
 
     if request.method == "POST":
-        resposta_raw = request.POST.get("resposta")
+        resposta_raw = request.POST.get("resposta", "").strip().lower()
 
-        # 🔹 Log do que está sendo recebido no POST
-        print(f"DEBUG: Resposta recebida no POST -> {resposta_raw}")
+        # Trata tipo booleano somente se sim/não
+        if pergunta.tipo == "sim_nao":
+            resposta_convertida = resposta_raw == "sim"
+        else:
+            resposta_convertida = resposta_raw  # salva como string mesmo
 
-        # 🔹 Converte "sim"/"nao" para True/False corretamente
-        resposta = resposta_raw.strip().lower() == "sim"
-
-        # 🔹 Log do valor convertido
-        print(f"DEBUG: Resposta convertida para booleano -> {resposta}")
-
-        # 🔹 Salva a resposta corretamente
-        resposta_obj, created = Resposta.objects.update_or_create(
+        # Salva resposta
+        Resposta.objects.update_or_create(
             paciente=paciente,
             pergunta=pergunta,
-            defaults={"resposta": resposta}  # Salva "True" ou "False"
+            defaults={"resposta": resposta_convertida}
         )
 
-        print(f"DEBUG: Resposta salva -> {resposta_obj.resposta} (Criado: {created})")
+        # Inicializa a pilha se necessário
+        if "retornar_para_pilha" not in request.session:
+            request.session["retornar_para_pilha"] = []
 
-        # 🔹 Define a próxima pergunta
-        proxima_pergunta = transicoes.get(pergunta_atual, {}).get(resposta_raw)
+        # Se for desvio, empilha o retorno correto
+        if resposta_raw == "sim" and pergunta.desvio_para:
+            # se houver retornar_para, ele é mais confiável do que proxima_se_sim
+            if pergunta.retornar_para:
+                request.session["retornar_para_pilha"].append(pergunta.retornar_para.id)
+            elif pergunta.proxima_se_sim:
+                request.session["retornar_para_pilha"].append(pergunta.proxima_se_sim.id)
+            request.session.modified = True
+            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=pergunta.desvio_para.id)
 
-        if proxima_pergunta == 'fim':
-            return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
+        # Se chegou ao fim do desvio (sem próxima pergunta)
+        if not pergunta.proxima_se_sim and not pergunta.proxima_se_nao:
+            if request.session.get("retornar_para_pilha"):
+                proxima_id = request.session["retornar_para_pilha"].pop()
+                request.session.modified = True
+                return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima_id)
+            else:
+                return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
 
-        pergunta_atual = proxima_pergunta
-        pergunta = Pergunta.objects.filter(numero_pergunta=pergunta_atual, fase_tratamento="reducao").first()
+        # Continua normalmente
+        proxima = pergunta.proxima_se_sim if resposta_raw == "sim" else pergunta.proxima_se_nao
+        if proxima:
+            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima.id)
 
-        if not pergunta:
-            return HttpResponse("Pergunta seguinte não encontrada.", status=404)
+        return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
 
-    return render(request, "galeria/questionario_reducao.html", {
+    return render(request, "galeria/questionario.html", {
         "paciente": paciente,
         "pergunta": pergunta
     })
+
+
+
+def exportar_relatorio_excel(request):
+    # Obtendo os dados agrupados por fase, pergunta e resposta
+    respostas_por_fase = Resposta.objects.values(
+        'pergunta__fase_tratamento',  
+        'pergunta__texto', 
+        'resposta'
+    ).annotate(total=Count('id'))
+
+    # Contar o número de pacientes distintos por pergunta
+    pacientes_por_pergunta = Resposta.objects.values(
+        'pergunta__texto'
+    ).annotate(total_pacientes=Count('paciente', distinct=True))
+
+    pacientes_dict = {p['pergunta__texto']: p['total_pacientes'] for p in pacientes_por_pergunta}
+
+    # Estruturando os dados
+    dados_exportacao = []
+
+    estatisticas = {}
+    for item in respostas_por_fase:
+        fase = item['pergunta__fase_tratamento']
+        pergunta = item['pergunta__texto']
+        resposta = "Sim" if item['resposta'] else "Não"
+        total = item['total']
+        total_pacientes = pacientes_dict.get(pergunta, 0)
+
+        if fase not in estatisticas:
+            estatisticas[fase] = {}
+
+        if pergunta not in estatisticas[fase]:
+            estatisticas[fase][pergunta] = {"Sim": 0, "Não": 0, "Respondentes": total_pacientes}
+
+        estatisticas[fase][pergunta][resposta] += total
+
+    # Preenchendo os dados na lista
+    for fase, perguntas in estatisticas.items():
+        for pergunta, respostas in perguntas.items():
+            total = respostas["Sim"] + respostas["Não"]
+            percentual_sim = round((respostas["Sim"] / total) * 100, 2) if total > 0 else 0
+            percentual_nao = 100 - percentual_sim if total > 0 else 0
+
+            dados_exportacao.append({
+                "Fase": fase,
+                "Pergunta": pergunta,
+                "Sim": respostas["Sim"],
+                "Não": respostas["Não"],
+                "% Sim": percentual_sim,
+                "% Não": percentual_nao,
+                "Respondentes": respostas["Respondentes"]
+            })
+
+    # Criando o DataFrame
+    df = pd.DataFrame(dados_exportacao)
+
+    # Criar a resposta HTTP com o Excel
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="relatorio_estatisticas.xlsx"'
+
+    # Escrever para Excel usando pandas
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Estatísticas')
+
+        # Ajuste de largura automática
+        worksheet = writer.sheets['Estatísticas']
+        for col in worksheet.columns:
+            max_length = max(len(str(cell.value)) if cell.value else 0 for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            worksheet.column_dimensions[col_letter].width = max_length + 2
+
+        # Alinhar colunas
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+    return response
 
 def dashboard_view(request):
     # Contagem de pacientes por fase
