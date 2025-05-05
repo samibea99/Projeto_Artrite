@@ -38,7 +38,11 @@
     </script>
 </head>
 <body class="bg-gray-100" style="background-image: url('{% static 'img/cad.jpg' %}'); background-size: cover; background-repeat: no-repeat; background-position: center;">
-
+    {% if pergunta_respondida %}
+    <div class="bg-yellow-100 text-yellow-800 p-4 rounded-lg mb-4 text-center shadow-md">
+        <strong>Aviso:</strong> Esta pergunta já foi respondida. Você pode seguir em frente, mas não poderá alterar essa resposta.
+    </div>
+    {% endif %}
     <div class="min-h-screen flex items-center justify-center p-6">
         <div class="bg-white w-full max-w-3xl p-8 rounded-lg shadow-md">
             <h1 class="text-3xl font-bold text-blue-700 text-center mb-6">
