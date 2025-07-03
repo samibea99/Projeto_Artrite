@@ -28,7 +28,7 @@ TIPO_PERGUNTA_CHOICES = [
 ]
 
 class Paciente(models.Model):
-    numero_paciente = models.CharField(max_length=50, unique=True)
+    numero_paciente = models.CharField(max_length=50)
     numero_centro = models.CharField(max_length=50)
     numero_pesquisador = models.CharField(max_length=50)
     data_observacao = models.DateField()
