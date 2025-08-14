@@ -1,4 +1,5 @@
 import pandas as pd
+import unicodedata
 from django.db.models import Count
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse
@@ -44,40 +45,64 @@ def cadastro_paciente(request):
     return render(request, "galeria/cadastro_paciente.html")
 
 
+def normalizar(texto: str) -> str:
+    """Remove acentos, minúsculo e trim."""
+    if not texto:
+        return ""
+    texto = str(texto).strip().lower()
+    texto = unicodedata.normalize("NFD", texto)
+    texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    return texto
+
 def responder_pergunta(request, paciente_id, pergunta_id=None):
     paciente = get_object_or_404(Paciente, id=paciente_id)
 
+    # Pergunta atual
     if pergunta_id:
         pergunta = get_object_or_404(Pergunta, id=pergunta_id)
     else:
-        pergunta = Pergunta.objects.filter(numero_pergunta=1, fase_tratamento=paciente.fase_tratamento).first()
+        pergunta = Pergunta.objects.filter(
+            numero_pergunta=1,
+            fase_tratamento=paciente.fase_tratamento
+        ).first()
 
     if not pergunta:
         return HttpResponse("Pergunta não encontrada.", status=404)
 
+    # Helper: garantir mesma fase
+    def coagir_mesma_fase(prox):
+        if not prox:
+            return None
+        if prox.fase_tratamento == pergunta.fase_tratamento:
+            return prox
+        # tenta achar pergunta com MESMO NÚMERO na MESMA FASE da atual
+        candidato = Pergunta.objects.filter(
+            numero_pergunta=prox.numero_pergunta,
+            fase_tratamento=pergunta.fase_tratamento
+        ).first()
+        return candidato or prox
+
     if request.method == "POST":
-        resposta_raw = request.POST.get("resposta", "").strip().lower()
+        resposta_raw = request.POST.get("resposta", "")
+        rnorm = normalizar(resposta_raw)
 
-        # Trata tipo booleano somente se sim/não
+        # Salvar resposta (bool só se sim/não)
         if pergunta.tipo == "sim_nao":
-            resposta_convertida = resposta_raw == "sim"
+            resposta_convertida = rnorm.startswith("sim")
         else:
-            resposta_convertida = resposta_raw  # salva como string mesmo
-
-        # Salva resposta
+            resposta_convertida = resposta_raw  # mantém rótulo original
         Resposta.objects.update_or_create(
             paciente=paciente,
             pergunta=pergunta,
             defaults={"resposta": resposta_convertida}
         )
 
-        # Inicializa a pilha se necessário
+        # Pilha de retorno para desvios
         if "retornar_para_pilha" not in request.session:
             request.session["retornar_para_pilha"] = []
 
-        # Se for desvio, empilha o retorno correto
-        if resposta_raw == "sim" and pergunta.desvio_para:
-            # se houver retornar_para, ele é mais confiável do que proxima_se_sim
+        # Desvio explícito (só quando respondeu "sim")
+        if rnorm.startswith("sim") and pergunta.desvio_para:
             if pergunta.retornar_para:
                 request.session["retornar_para_pilha"].append(pergunta.retornar_para.id)
             elif pergunta.proxima_se_sim:
@@ -85,28 +110,72 @@ def responder_pergunta(request, paciente_id, pergunta_id=None):
             request.session.modified = True
             return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=pergunta.desvio_para.id)
 
-        # Se chegou ao fim do desvio (sem próxima pergunta)
-        if not pergunta.proxima_se_sim and not pergunta.proxima_se_nao:
+        # Se não há próximas e estamos num desvio, retorna
+        if not pergunta.proxima_se_sim and not pergunta.proxima_se_nao and not getattr(pergunta, "proxima_se_terceira_opcao", None):
             if request.session.get("retornar_para_pilha"):
                 proxima_id = request.session["retornar_para_pilha"].pop()
                 request.session.modified = True
                 return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima_id)
-            else:
-                return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
+            return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
 
-        # Continua normalmente
-        proxima = pergunta.proxima_se_sim if resposta_raw == "sim" else pergunta.proxima_se_nao
+        # --------- Decisão da próxima ---------
+        proxima = None
+        fase_pergunta_norm = normalizar(pergunta.fase_tratamento)
+
+        # Regra especial: SOMENTE pergunta 4 da fase MTX
+        if pergunta.numero_pergunta == 4 and fase_pergunta_norm == "mtx":
+            if "folico" in rnorm:
+                proxima = Pergunta.objects.filter(
+                    numero_pergunta=5,
+                    fase_tratamento=pergunta.fase_tratamento
+                ).first()
+            elif "folinico" in rnorm:
+                proxima = Pergunta.objects.filter(
+                    numero_pergunta=6,
+                    fase_tratamento=pergunta.fase_tratamento
+                ).first()
+            elif rnorm.startswith("nao"):
+                proxima = Pergunta.objects.filter(
+                    numero_pergunta=7,
+                    fase_tratamento=pergunta.fase_tratamento
+                ).first()
+        else:
+            # Fluxo padrão:
+            if pergunta.tipo == "sim_nao":
+                if rnorm.startswith("sim"):
+                    proxima = pergunta.proxima_se_sim
+                elif rnorm.startswith("nao"):
+                    proxima = pergunta.proxima_se_nao
+            else:
+                # Para múltipla escolha (ou outros), escolha o primeiro caminho configurado
+                proxima = pergunta.proxima_se_sim or pergunta.proxima_se_nao or getattr(pergunta, "proxima_se_terceira_opcao", None)
+
+        # Garante que a próxima seja da MESMA FASE
+        proxima = coagir_mesma_fase(proxima)
+
+        # Redireciona se houver próxima
         if proxima:
             return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima.id)
 
+        # Sem próxima: tenta desempilhar retorno; senão encerra
+        if request.session.get("retornar_para_pilha"):
+            proxima_id = request.session["retornar_para_pilha"].pop()
+            request.session.modified = True
+            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima_id)
+
         return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
+
+    alternativas_str_list = []
+    alt_raw = getattr(pergunta, "alternativas", None)
+    if isinstance(alt_raw, str) and alt_raw.strip():
+        alternativas_str_list = [a.strip() for a in alt_raw.split("|") if a.strip()]
 
     return render(request, "galeria/questionario.html", {
         "paciente": paciente,
-        "pergunta": pergunta
+        "pergunta": pergunta,
+        "alternativas_str_list": alternativas_str_list,
     })
-
-
+    
 FASES_PRINCIPAIS = ['fase 1', 'fase1b', 'fase 2', 'fase 3', 'redução']
 
 def exportar_relatorio_excel(request):
