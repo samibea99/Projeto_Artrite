@@ -17,13 +17,20 @@
 
             let resposta = "";
             radios.forEach(radio => {
-                if (radio.checked) resposta = radio.value;
+                if (radio.checked) resposta = radio.value.toLowerCase();
             });
 
+<<<<<<< HEAD
             if (resposta.toLowerCase() === "sim") {
                 criticaSim?.classList.remove("hidden");
                 criticaNao?.classList.add("hidden");
             } else if (resposta.toLowerCase() === "nao") {
+=======
+            if (resposta.startsWith("sim")) {
+                criticaSim?.classList.remove("hidden");
+                criticaNao?.classList.add("hidden");
+            } else if (resposta.startsWith("nao")) {
+>>>>>>> 96585f24426ed2ac76ee32260b8b99491d3d3550
                 criticaSim?.classList.add("hidden");
                 criticaNao?.classList.remove("hidden");
             } else {
@@ -67,22 +74,38 @@
                 <div>
                     <label class="block text-gray-700 font-semibold mb-1">Resposta:</label>
                     <div class="space-y-2">
+<<<<<<< HEAD
                         {% if pergunta.alternativas.all %}
                             {% for alternativa in pergunta.alternativas.all %}
+=======
+                        {# Caso haja lista de alternativas em string (separadas por |), usa ela #}
+                        {% if alternativas_str_list %}
+                            {% for alternativa in alternativas_str_list %}
+>>>>>>> 96585f24426ed2ac76ee32260b8b99491d3d3550
                                 <label class="flex items-center space-x-2">
-                                    <input type="radio" name="resposta" value="{{ alternativa.texto }}" class="text-blue-600 focus:ring-blue-500">
-                                    <span>{{ alternativa.texto }}</span>
+                                    <input type="radio" name="resposta" value="{{ alternativa }}" class="text-blue-600 focus:ring-blue-500">
+                                    <span>{{ alternativa }}</span>
                                 </label>
                             {% endfor %}
                         {% else %}
-                            <label class="flex items-center space-x-2">
-                                <input type="radio" name="resposta" value="sim" checked class="text-blue-600 focus:ring-blue-500">
-                                <span>Sim</span>
-                            </label>
-                            <label class="flex items-center space-x-2">
-                                <input type="radio" name="resposta" value="nao" class="text-blue-600 focus:ring-blue-500">
-                                <span>Não</span>
-                            </label>
+                            {# Padrão: usa tipo da pergunta #}
+                            {% if pergunta.tipo == 'multipla_escolha' %}
+                                {% for alternativa in pergunta.alternativas.all %}
+                                    <label class="flex items-center space-x-2">
+                                        <input type="radio" name="resposta" value="{{ alternativa.texto }}" class="text-blue-600 focus:ring-blue-500">
+                                        <span>{{ alternativa.texto }}</span>
+                                    </label>
+                                {% endfor %}
+                            {% else %}
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="resposta" value="Sim" checked class="text-blue-600 focus:ring-blue-500">
+                                    <span>Sim</span>
+                                </label>
+                                <label class="flex items-center space-x-2">
+                                    <input type="radio" name="resposta" value="Nao" class="text-blue-600 focus:ring-blue-500">
+                                    <span>Não</span>
+                                </label>
+                            {% endif %}
                         {% endif %}
                     </div>
                 </div>
