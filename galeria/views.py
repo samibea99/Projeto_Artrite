@@ -46,7 +46,7 @@ def cadastro_paciente(request):
 
 def responder_pergunta(request, paciente_id, pergunta_id=None):
     paciente = get_object_or_404(Paciente, id=paciente_id)
-
+    
     if pergunta_id:
         pergunta = get_object_or_404(Pergunta, id=pergunta_id)
     else:
@@ -56,58 +56,65 @@ def responder_pergunta(request, paciente_id, pergunta_id=None):
         return HttpResponse("Pergunta não encontrada.", status=404)
 
     if request.method == "POST":
-        resposta_raw = request.POST.get("resposta", "").strip().lower()
+        resposta_raw = request.POST.get("resposta", "").strip()
 
-        # Trata tipo booleano somente se sim/não
-        if pergunta.tipo == "sim_nao":
-            resposta_convertida = resposta_raw == "sim"
-        else:
-            resposta_convertida = resposta_raw  # salva como string mesmo
-
-        # Salva resposta
+        # Salva a resposta do formulário (o texto da alternativa, ex: "Melhor")
         Resposta.objects.update_or_create(
             paciente=paciente,
             pergunta=pergunta,
-            defaults={"resposta": resposta_convertida}
+            defaults={"resposta": resposta_raw}
         )
-
-        # Inicializa a pilha se necessário
-        if "retornar_para_pilha" not in request.session:
-            request.session["retornar_para_pilha"] = []
-
-        # Se for desvio, empilha o retorno correto
-        if resposta_raw == "sim" and pergunta.desvio_para:
-            # se houver retornar_para, ele é mais confiável do que proxima_se_sim
-            if pergunta.retornar_para:
-                request.session["retornar_para_pilha"].append(pergunta.retornar_para.id)
-            elif pergunta.proxima_se_sim:
-                request.session["retornar_para_pilha"].append(pergunta.proxima_se_sim.id)
-            request.session.modified = True
-            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=pergunta.desvio_para.id)
-
-        # Se chegou ao fim do desvio (sem próxima pergunta)
-        if not pergunta.proxima_se_sim and not pergunta.proxima_se_nao:
-            if request.session.get("retornar_para_pilha"):
-                proxima_id = request.session["retornar_para_pilha"].pop()
+        
+        proxima = None
+        
+        # --- LÓGICA DE NAVEGAÇÃO AJUSTADA ---
+        # A navegação agora depende do tipo da pergunta
+        
+        # Lógica para perguntas de Múltipla Escolha
+        if pergunta.tipo == "multipla_escolha":
+            try:
+                # Busca a alternativa escolhida e obtém a próxima pergunta a partir dela
+                alternativa_escolhida = Alternativa.objects.get(pergunta=pergunta, texto=resposta_raw)
+                proxima = alternativa_escolhida.proxima_pergunta
+            except Alternativa.DoesNotExist:
+                # A resposta não corresponde a uma alternativa. Lidar com isso se necessário.
+                pass
+        
+        # Lógica para perguntas de Sim/Não (mantida para compatibilidade)
+        else: # Assumimos 'sim_nao'
+            resposta_lower = resposta_raw.lower()
+            
+            # Lógica de desvio (pilha) que você já tem
+            if resposta_lower == "sim" and pergunta.desvio_para:
+                if "retornar_para_pilha" not in request.session:
+                    request.session["retornar_para_pilha"] = []
+                
+                retorno = pergunta.retornar_para or pergunta.proxima_se_sim
+                if retorno:
+                    request.session["retornar_para_pilha"].append(retorno.id)
                 request.session.modified = True
-                return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima_id)
-            else:
-                return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
+                return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=pergunta.desvio_para.id)
+                
+            # Lógica normal para sim/nao
+            proxima = pergunta.proxima_se_sim if resposta_lower == "sim" else pergunta.proxima_se_nao
 
-        # Continua normalmente
-        proxima = pergunta.proxima_se_sim if resposta_raw == "sim" else pergunta.proxima_se_nao
+        # --- REDIRECIONAMENTO UNIFICADO ---
         if proxima:
             return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima.id)
 
-        return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
+        # Se não houver próxima pergunta, checa se há um retorno na pilha
+        if request.session.get("retornar_para_pilha"):
+            proxima_id = request.session["retornar_para_pilha"].pop()
+            request.session.modified = True
+            return redirect("responder_pergunta", paciente_id=paciente.id, pergunta_id=proxima_id)
+        else:
+            # Fim do questionário
+            return render(request, "galeria/confirmacao_conclusao.html", {"paciente": paciente})
 
     return render(request, "galeria/questionario.html", {
         "paciente": paciente,
         "pergunta": pergunta
     })
-
-
-FASES_PRINCIPAIS = ['fase 1', 'fase1b', 'fase 2', 'fase 3', 'redução']
 
 def exportar_relatorio_excel(request):
     # Agrupar respostas para estatísticas, eliminando duplicidades

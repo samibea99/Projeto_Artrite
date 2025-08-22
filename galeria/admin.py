@@ -5,6 +5,7 @@ from galeria.models import Paciente, Resposta, Pergunta, Alternativa
 # Inline para cadastrar alternativas diretamente na pergunta
 class AlternativaInline(admin.TabularInline):
     model = Alternativa
+    fk_name = "pergunta" 
     extra = 1
 
 # Customização do admin para Pergunta

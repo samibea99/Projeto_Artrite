@@ -43,6 +43,7 @@ class Pergunta(models.Model):
     fase_tratamento = models.CharField(max_length=20, choices=FASES_TRATAMENTO)
     tipo = models.CharField(max_length=20, choices=TIPO_PERGUNTA_CHOICES, default='sim_nao')
 
+    # Mantemos os campos antigos, mas agora eles são opcionais
     proxima_se_sim = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='proxima_sim')
     proxima_se_nao = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='proxima_nao')
     desvio_para = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='desvio')
@@ -60,9 +61,12 @@ class Pergunta(models.Model):
 class Alternativa(models.Model):
     pergunta = models.ForeignKey(Pergunta, on_delete=models.CASCADE, related_name='alternativas')
     texto = models.CharField(max_length=255)
+    
+    # NOVO CAMPO: Aponta para a próxima pergunta que esta alternativa leva
+    proxima_pergunta = models.ForeignKey(Pergunta, on_delete=models.SET_NULL, null=True, blank=True, related_name='alternativa_proxima')
 
     def __str__(self):
-        return self.texto
+        return f"{self.texto} (para Q{self.pergunta.numero_pergunta})"
 
 class Resposta(models.Model):
     paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
